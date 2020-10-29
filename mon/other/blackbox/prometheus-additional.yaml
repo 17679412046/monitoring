@@ -1,0 +1,181 @@
+  - job_name: "blackbox-k8s-service-dns"
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    metrics_path: /probe # 不是 metrics，是 probe
+    params:
+      module: [dns_tcp] # 使用 DNS TCP 模块
+    static_configs:
+    - targets:
+      - kube-dns.kube-system:53  # 不要省略端口号
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: __param_target
+    - source_labels: [__param_target]
+      target_label: instance
+    - target_label: __address__
+      replacement: blackbox.monitoring:9115  # 服务地址，和上面的 Service 定义保持一致
+
+  - job_name: 'traefik'
+    kubernetes_sd_configs:
+    - role: pod
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+      action: keep
+      regex: traefik
+    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+      action: replace
+      target_label: __metrics_path__
+      regex: (.+)
+    - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+      action: replace
+      regex: ([^:]+)(?::\d+)?;(\d+)
+      replacement: $1:$2
+      target_label: __address__
+    - action: labelmap
+      regex: __meta_kubernetes_pod_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      action: replace
+      target_label: kubernetes_namespace
+    - source_labels: [__meta_kubernetes_pod_name]
+      action: replace
+      target_label: kubernetes_pod_name
+  
+  - job_name: 'blackbox-external-website'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]  # Look for a HTTP 200 response.
+    static_configs:
+    - targets:
+      - http://prometheus.k8s.com # 要检查的网址
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox.monitoring:9115  # The blackbox exporter's service name and port.
+
+  - job_name: 'blackbox-http-post'
+    metrics_path: /probe
+    params:
+      module: [http_post_2xx]
+    static_configs:
+      - targets:
+        - http://registry-29.k8s.com/api # 要检查的网址
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox.monitoring:9115  # The blackbox exporter's service name and port.
+
+  - job_name: 'kubernetes-http-services'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]  # 使用定义的http模块
+    kubernetes_sd_configs:
+    - role: service  # service 类型的服务发现
+    relabel_configs:
+    # 只有service的annotation中配置了 prometheus.io/http_probe=true 的才进行发现
+    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_http_probe]
+      action: keep
+      regex: true
+    - source_labels: [__address__]
+      target_label: __param_target
+    - target_label: __address__
+      replacement: blackbox.monitoring:9115  # The blackbox exporter's service name and port.
+    - source_labels: [__param_target]
+      target_label: instance
+    - action: labelmap
+      regex: __meta_kubernetes_service_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      target_label: kubernetes_namespace
+    - source_labels: [__meta_kubernetes_service_name]
+      target_label: kubernetes_name
+
+  - job_name: 'blackbox-k8s-ingresses'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]  # 使用定义的http模块
+    kubernetes_sd_configs:
+    - role: ingress  # ingress 类型的服务发现
+    relabel_configs:
+    # 只有ingress的annotation中配置了 prometheus.io/http_probe=true 的才进行发现
+    - source_labels: [__meta_kubernetes_ingress_annotation_prometheus_io_http_probe]
+      action: keep
+      regex: true
+    - source_labels: [__meta_kubernetes_ingress_scheme,__address__,__meta_kubernetes_ingress_path]
+      regex: (.+);(.+);(.+)
+      replacement: ${1}://${2}${3}
+      target_label: __param_target
+    - target_label: __address__
+      replacement: blackbox.monitoring:9115  # The blackbox exporter's service name and port.
+    - source_labels: [__param_target]
+      target_label: instance
+    - action: labelmap
+      regex: __meta_kubernetes_ingress_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      target_label: kubernetes_namespace
+    - source_labels: [__meta_kubernetes_ingress_name]
+      target_label: kubernetes_name
+
+  - job_name: 'blackbox_tcp_pod_probe'
+    metrics_path: /probe
+    kubernetes_sd_configs:
+    - role: pod
+    params:
+      module: [tcp_connect]
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_annotation_blackbox_scheme]
+      action: keep
+      regex: tcp
+    - source_labels: [__address__, __meta_kubernetes_pod_annotation_blackbox_port]
+      action: replace
+      regex: ([^:]+)(?::\d+)?;(\d+)
+      replacement: $1:$2
+      target_label: __param_target
+    - action: replace
+      target_label: __address__
+      replacement: blackbox.monitoring:9115  # The blackbox exporter's service name and port.
+    - source_labels: [__param_target]
+      target_label: instance
+    - action: labelmap
+      regex: __meta_kubernetes_pod_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      action: replace
+      target_label: kubernetes_namespace
+    - source_labels: [__meta_kubernetes_pod_name]
+      action: replace
+      target_label: kubernetes_pod_name
+
+  - job_name: 'blackbox_http_pod_probe'
+    metrics_path: /probe
+    kubernetes_sd_configs:
+    - role: pod
+    params:
+      module: [http_2xx]
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_annotation_blackbox_scheme]
+      action: keep
+      regex: http
+    - source_labels: [__address__, __meta_kubernetes_pod_annotation_blackbox_port,  __meta_kubernetes_pod_annotation_blackbox_path]
+      action: replace
+      regex: ([^:]+)(?::\d+)?;(\d+);(.+)
+      replacement: $1:$2$3
+      target_label: __param_target
+    - action: replace
+      target_label: __address__
+      replacement: blackbox.monitoring:9115  # The blackbox exporter's service name and port.
+    - source_labels: [__param_target]
+      target_label: instance
+    - action: labelmap
+      regex: __meta_kubernetes_pod_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      action: replace
+      target_label: kubernetes_namespace
+    - source_labels: [__meta_kubernetes_pod_name]
+      action: replace
+      target_label: kubernetes_pod_name

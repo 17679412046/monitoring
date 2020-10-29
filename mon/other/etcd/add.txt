@@ -1,0 +1,10 @@
+#add etc
+kubectl -n monitoring create secret generic etcd-certs --from-file=/etc/kubernetes/pki/etcd/healthcheck-client.crt --from-file=/etc/kubernetes/pki/etcd/healthcheck-client.key --from-file=/etc/kubernetes/pki/etcd/ca.crt
+kubectl edit prometheus k8s -n monitoring
+nodeSelector:
+  beta.kubernetes.io/os: linux
+replicas: 2
+secrets:
+- etcd-certs
+kubectl apply -f prometheus-serviceMonitorEtcd.yaml
+kubectl apply -f prometheus-etcdService.yaml
