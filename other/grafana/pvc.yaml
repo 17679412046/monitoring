@@ -1,0 +1,13 @@
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: ceph-fs-monitoring-grafana
+  namespace: monitoring
+spec:
+  accessModes:     
+    - ReadWriteOnce
+  storageClassName: monitoring-ceph-fs
+  resources:
+    requests:
+      storage: 100Gi
